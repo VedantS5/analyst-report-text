@@ -43,17 +43,17 @@ After securing computing resources, you must deploy the Ollama servers before ru
 
 1. Navigate to the code directory:
    ```bash
-   cd /N/project/fads_ng/analyst_reports_project/codes/02/
+   cd /N/project/fads_ng/analyst_reports_project/codes/02/markdown_based/
    ```
 
 2. Launch Ollama servers using the deployment script:
    ```bash
-   source ollama_server_deployment.sh [v100 or a100 or h100 or qwq]
+   source ./ollama_server_deployment.sh [v100 or a100 or h100 or qwq]
    ```
    
    Example for Hopper GPUs:
    ```bash
-   sh ollama_server_deployment.sh h100
+   sh ./ollama_server_deployment.sh h100
    ```
 
 Once the Ollama servers are running, you can proceed to execute the extraction script.
