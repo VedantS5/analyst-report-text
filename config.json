@@ -1,0 +1,33 @@
+{
+    "ollama": {
+        "fallback_api_url": "http://localhost:11434/api/generate",
+        "model": "gemma3:27b",
+        "timeout": 180,
+        "auto_detect": true,
+        "port_range": [11434, 11465]
+    },
+    "processing": {
+        "chunk_size": 6000,
+        "chunk_overlap": 1000,
+        "max_tokens": 8000
+    },
+    "input": {
+        "directory": "/N/project/fads_ng/analyst_reports_project/data/analyst_reports_txt_page1/"
+    },
+    "output": {
+        "directory": "/N/project/fads_ng/analyst_reports_project/data/csv_reports/",
+        "csv_filename": "temp_author_report.csv"
+    },
+    "execution": {
+        "max_files": 1000,
+        "timeout_seconds": 120,
+        "max_retries": 3
+    },
+    "prompt": {
+        "template": "Extract information about the authors from the following text content of a research report or financial document. Carefully look for names, titles, and email addresses.\n\nRules:\n1. Names must be properly capitalized and have at least two words (e.g., John Smith)\n2. Look for titles that often accompany author names (e.g., Senior Analyst, Chief Economist)\n3. Email addresses typically follow standard formatting (name@domain.com)\n4. Only include actual authors, not referenced people\n5. If multiple authors, list them all\n6. If email domain is mergent.com, exclude it as it's not an author\n\nRespond ONLY in valid JSON format:\n{\"authors\": [{\"name\": \"Full Name\", \"title\": \"Professional Title\", \"email\": \"email@address.com\"}]}\nIf you find no valid authors, respond with {\"authors\": []}\n\nTEXT CONTENT:\n{{TEXT_CONTENT}}"
+    },
+    "debug": {
+        "enabled": false,
+        "log_level": "INFO"
+    }
+}
