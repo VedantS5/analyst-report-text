@@ -1,10 +1,50 @@
-# Documentation for 02_markdown.py
+# Analyst Report Text
+
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+
+Extract author metadata from text files derived from PDF analyst reports using LLMs with intelligent text chunking. This tool works in tandem with [pdf-md-toolkit](https://github.com/VedantS5/pdf-md-toolkit) for complete document processing.
 
 ## Overview
 
-`02_markdown.py` is a specialized text processing tool that automatically extracts author information from document text files. The script uses AI-powered analysis through Ollama to identify authors along with their professional titles and email addresses from text documents.
+This specialized tool extracts author information from financial analyst reports using text-based processing. It takes text or markdown files (converted from PDFs) as input and applies LLM analysis to identify authors, titles, and contact information.
 
-Located at: `/N/project/fads_ng/analyst_reports_project/codes/02/markdown_based/02_markdown.py`
+### Complete Workflow
+
+1. **PDF to Text Conversion**: Use the [pdf-md-toolkit](https://github.com/VedantS5/pdf-md-toolkit) to convert PDF files to text/markdown format
+2. **Text Analysis**: Process the converted files with this tool to extract author information
+
+The system consists of three main components:
+
+1. **02_markdown.py**: The main Python script that processes text files and uses Ollama to identify authors
+2. **ollama_server_deployment.sh**: Shell script to deploy Ollama instances across available GPUs
+3. **config.json**: Configuration file for customizing the behavior of the extraction tool
+
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/VedantS5/analyst-report-text.git
+cd analyst-report-text
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+## Project Structure
+
+The repository contains these main components:
+
+```
+02_markdown.py               # Main script for text processing
+ollama_server_deployment.sh  # Script to deploy Ollama instances
+config.json                  # Configuration file
+requirements.txt            # Required Python packages
+setup.py                    # Package installation script
+LICENSE                     # MIT License
+```
+
+> **Note:** The original development paths (`/N/project/fads_ng/analyst_reports_project/...`) referenced in code comments are specific to Indiana University's Quartz computing environment and should be adapted to your local environment.
 
 ## Purpose
 
@@ -18,9 +58,19 @@ The script is optimized for processing large document collections efficiently, s
 
 ## Setup and Environment
 
-### Requesting Interactive Computing Resources
+### System Requirements
 
-Before running the code, you need to request appropriate computing resources based on your needs:
+This tool is designed to work with GPU acceleration for optimal performance:
+
+- **Recommended**: NVIDIA GPUs with CUDA support
+- Python 3.8+
+- [Ollama](https://github.com/jmorganca/ollama) for running LLMs locally
+- At least 16GB RAM (32GB+ recommended for large text files)
+- [pdf-md-toolkit](https://github.com/VedantS5/pdf-md-toolkit) for PDF to text conversion
+
+### For HPC/Cluster Users (Indiana University-specific)
+
+> **Note:** The following commands are specific to Indiana University's computing resources. If you're using a different system, refer to your system's documentation for equivalent commands.
 
 #### V100 Quartz:
 ```bash
@@ -37,23 +87,35 @@ srun -p gpu-debug --cpus-per-task 30 --gpus 4 --mem 60GB -A r01352 --time 1:00:0
 srun -p hopper --cpus-per-task 40 --gpus 4 --mem 120GB -A r01352 --time 1:00:00 --pty bash
 ```
 
-### Ollama Server Setup
+### General Setup (All Systems)
 
-After securing computing resources, you must deploy the Ollama servers before running the extraction script:
-
-1. Navigate to the code directory:
+1. Ensure you have Ollama installed
    ```bash
-   cd /N/project/fads_ng/analyst_reports_project/codes/02/markdown_based/
-   ```
-
-2. Launch Ollama servers using the deployment script:
-   ```bash
-   source ./ollama_server_deployment.sh [v100 or a100 or h100 or qwq]
-   ```
+   # For Linux/macOS
+   curl -fsSL https://ollama.com/install.sh | sh
    
-   Example for Hopper GPUs:
+   # For other systems, see: https://github.com/jmorganca/ollama
+   ```
+
+2. Clone this repository and install dependencies:
    ```bash
-   sh ./ollama_server_deployment.sh h100
+   git clone https://github.com/VedantS5/analyst-report-text.git
+   cd analyst-report-text
+   pip install -r requirements.txt
+   ```
+
+3. Make the deployment script executable:
+   ```bash
+   chmod +x ollama_server_deployment.sh
+   ```
+
+4. Convert your PDF files to text/markdown using pdf-md-toolkit:
+   ```bash
+   # Install pdf-md-toolkit if not already installed
+   pip install git+https://github.com/VedantS5/pdf-md-toolkit.git
+   
+   # Convert PDFs to text files
+   pdf-md-toolkit --converter pymu --input /path/to/pdfs --output /path/to/text_files
    ```
 
 Once the Ollama servers are running, you can proceed to execute the extraction script.
@@ -214,14 +276,47 @@ The output CSV includes these columns:
 - Server cooldown when errors occur to prevent cascading failures
 - Backup creation of existing CSV files before modifying them
 
-## Production Environment
+## Environment Setup
 
-This script is designed to run in the specific project environment at:
-`/N/project/fads_ng/analyst_reports_project/`
+### GPU Configuration
 
-The script has hardcoded paths for:
+The deployment script can be configured for different GPU setups:
 
-- **Input files**: `/N/project/fads_ng/analyst_reports_project/data/analyst_reports_txt_page1/`
-- **Output directory**: `/N/project/fads_ng/analyst_reports_project/data/csv_reports/`
+- `image`: Optimized for image processing (for analyst-report-vision)
+- `h100`: Optimized for H100 GPUs - 8 instances per GPU
+- `a100`: Optimized for A100 GPUs - 4 instances per GPU
+- `v100`: Optimized for V100 GPUs - 3 instances per GPU
+- `qwq`: Generic configuration for other GPU types - 2 instances per GPU
+
+### Local Environment Configuration
+
+For local installations, you may need to modify these settings:
+
+1. Edit `ollama_server_deployment.sh` to match your GPU configuration
+2. Update the `config.json` file with appropriate paths for your system
+3. If running without multiple GPUs, you can use a simpler setup with a single Ollama instance
+
+### Using Your Own LLM Models
+
+The system is configured to use standard LLM models. If you want to use a different model:
+
+1. Modify the model name in `config.json`
+2. Update the `ollama_server_deployment.sh` script to pull your preferred model
+
+## Integrated Workflow with pdf-md-toolkit
+
+For a complete author extraction pipeline:
+
+1. **Convert PDFs to text/markdown**:
+   ```bash
+   pdf-md-toolkit --converter pymu --input /path/to/pdfs --output /path/to/text_files
+   ```
+
+2. **Extract author information**:
+   ```bash
+   python 02_markdown.py --input_dir /path/to/text_files --output_csv author_results.csv
+   ```
+
+This two-step process separates concerns and allows for more flexibility in handling different document types and formats.
 
 When running the script, you only need to specify the output CSV filename (not the full path) as the script automatically prepends the output directory path.
