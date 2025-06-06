@@ -169,6 +169,32 @@ The system uses a JSON-based configuration system, similar to the image-based mo
 }
 ```
 
+## Parsing Configuration
+
+The behaviour of **02_markdown.py** when interpreting the model response is
+controlled by the new `parsing` section inside `config.json`:
+
+| Key | Description | Example |
+|-----|-------------|---------|
+| `type` | `json` *(default)* – expect valid JSON, or `regex` – extract authors using a regular expression | `"json"` |
+| `authors_key` | (json mode) Field that contains the list of authors | `"authors"` |
+| `name_key` / `title_key` / `email_key` | (json mode) Field names used for each author attribute | `"name"`, `"title"`, `"email"` |
+| `skip_domains` | List of email domains to ignore | `["mergent.com"]` |
+| `regex_pattern` | (regex mode) Pattern with named groups `?P<name>`, `?P<title>`, `?P<email>` | See below |
+| `name_group` / `title_group` / `email_group` | (regex mode) Names of the capture groups if you use different names |  |
+
+When `type` is set to `regex`, supply a `regex_pattern`, for example:
+
+```json
+"parsing": {
+  "type": "regex",
+  "regex_pattern": "(?P<name>[A-Z][a-z]+\\s+[A-Z][a-z]+)(?:,?\\s+(?P<title>[A-Za-z ]+))?\\s+(?P<email>[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+)"
+}
+```
+
+Adjust the `prompt.template` accordingly so that the model outputs text that
+matches the parsing strategy you choose.
+
 ## Usage
 
 ### Basic Command

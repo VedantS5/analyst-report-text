@@ -19,12 +19,24 @@
         "csv_filename": "temp_author_report.csv"
     },
     "execution": {
-        "max_files": 1000,
+        "max_files": 100,
         "timeout_seconds": 120,
         "max_retries": 3
     },
     "prompt": {
         "template": "Extract information about the authors from the following text content of a research report or financial document. Carefully look for names, titles, and email addresses.\n\nRules:\n1. Names must be properly capitalized and have at least two words (e.g., John Smith)\n2. Look for titles that often accompany author names (e.g., Senior Analyst, Chief Economist)\n3. Email addresses typically follow standard formatting (name@domain.com)\n4. Only include actual authors, not referenced people\n5. If multiple authors, list them all\n6. If email domain is mergent.com, exclude it as it's not an author\n\nRespond ONLY in valid JSON format:\n{\"authors\": [{\"name\": \"Full Name\", \"title\": \"Professional Title\", \"email\": \"email@address.com\"}]}\nIf you find no valid authors, respond with {\"authors\": []}\n\nTEXT CONTENT:\n{{TEXT_CONTENT}}"
+    },
+    "parsing": {
+        "type": "json",
+        "authors_key": "authors",
+        "name_key": "name",
+        "title_key": "title",
+        "email_key": "email",
+        "skip_domains": ["mergent.com"],
+        "regex_pattern": "",
+        "name_group": "name",
+        "title_group": "title",
+        "email_group": "email"
     },
     "debug": {
         "enabled": false,
