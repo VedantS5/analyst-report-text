@@ -53,6 +53,18 @@ def load_json_config(config_file=None) -> Dict[str, Any]:
         "prompt": {
             "template": "Extract information about the authors from the following text content of a research report or financial document. Carefully look for names, titles, and email addresses.\n\nRules:\n1. Names must be properly capitalized and have at least two words (e.g., John Smith)\n2. Look for titles that often accompany author names (e.g., Senior Analyst, Chief Economist)\n3. Email addresses typically follow standard formatting (name@domain.com)\n4. Only include actual authors, not referenced people\n5. If multiple authors, list them all\n6. If email domain is mergent.com, exclude it as it's not an author\n\nRespond ONLY in valid JSON format:\n{\"authors\": [{\"name\": \"Full Name\", \"title\": \"Professional Title\", \"email\": \"email@address.com\"}]}\nIf you find no valid authors, respond with {\"authors\": []}\n\nTEXT CONTENT:\n{{TEXT_CONTENT}}"
         },
+        "parsing": {
+            "type": "json",                  # "json" (default) or "regex"
+            "authors_key": "authors",        # Key containing the list of authors in JSON output
+            "name_key": "name",             # Field name for author name
+            "title_key": "title",           # Field name for author title
+            "email_key": "email",           # Field name for author email
+            "skip_domains": ["mergent.com"], # Email domains to ignore
+            "regex_pattern": "",            # Full regex with named groups (if type == 'regex')
+            "name_group": "name",           # Named group for name (regex mode)
+            "title_group": "title",         # Named group for title (regex mode)
+            "email_group": "email"          # Named group for email (regex mode)
+        },
         "debug": {
             "enabled": False,
             "log_level": "INFO"
@@ -538,40 +550,89 @@ def extract_authors(content: str, server_url: str) -> List[Dict]:
         raise
 
 def parse_model_response(response) -> List[Dict]:
+    """Parse the LLM response according to the strategy defined in the config
+    (section 'parsing'). Supports two strategies:
+    - 'json': expects well-formed JSON;
+    - 'regex': extracts using a regular expression with named capture groups.
+    Returns a list of author dictionaries with keys 'name', 'title', 'email'."""
     try:
+        cfg = get_config()
+        p_cfg = cfg.get('parsing', {})
+        parse_type = p_cfg.get('type', 'json').lower()
+
+        # Raw content string
         content = response.get('message', {}).get('content', '').strip()
-        # Remove markdown wrapping if included.
-        content = re.sub(r"^``````$", '', content)
-        data = json.loads(content)
-        authors = data.get('authors', [])
-        if not isinstance(authors, list):
-            return []
-        valid_authors = []
-        for author in authors:
-            if isinstance(author, dict):
-                # First, get the email and check for the unwanted domain.
-                email = author.get("email", "").strip()
-                if email and "mergent.com" in email.lower():
-                    # Skip this author – remove all details for this one.
+
+        # Strip markdown code fences like ```json ... ```
+        if content.startswith('```'):
+            content = re.sub(r'^```[a-zA-Z0-9]*\n', '', content)
+            content = content.rstrip('`').rstrip()
+
+        authors: List[Dict] = []
+        skip_domains = [d.lower() for d in p_cfg.get('skip_domains', ['mergent.com'])]
+
+        if parse_type == 'json':
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError as ex:
+                logging.error(f"JSON decode error: {ex}")
+                return []
+
+            authors_key = p_cfg.get('authors_key', 'authors')
+            raw_authors = data.get(authors_key, [])
+            if not isinstance(raw_authors, list):
+                return []
+
+            name_key = p_cfg.get('name_key', 'name')
+            title_key = p_cfg.get('title_key', 'title')
+            email_key = p_cfg.get('email_key', 'email')
+
+            for a in raw_authors:
+                if not isinstance(a, dict):
                     continue
-                # Process authors normally when the email doesn't contain 'mergent.com'
-                name = author.get("name", "").strip()
-                if (
-                    name 
-                    and len(name.split()) >= 2 
-                    and any(c.isupper() for c in name) 
-                    and len(name) <= 100
-                ):
-                    valid_authors.append({
-                        "name": name,
-                        "title": author.get("title", "").strip() if isinstance(author.get("title"), str) else "",
-                        "email": email,
-                    })
-        return valid_authors
+                name = str(a.get(name_key, '')).strip()
+                title = str(a.get(title_key, '')).strip() if isinstance(a.get(title_key), str) else ''
+                email = str(a.get(email_key, '')).strip()
+
+                if email and any(dom in email.lower() for dom in skip_domains):
+                    continue
+
+                if name and len(name.split()) >= 2 and any(c.isupper() for c in name) and len(name) <= 100:
+                    authors.append({"name": name, "title": title, "email": email})
+
+        elif parse_type == 'regex':
+            pattern = p_cfg.get('regex_pattern', '')
+            if not pattern:
+                logging.error("Regex parsing selected but 'regex_pattern' is empty in config.")
+                return []
+            try:
+                regex = re.compile(pattern, re.MULTILINE | re.IGNORECASE)
+            except re.error as ex:
+                logging.error(f"Invalid regex pattern: {ex}")
+                return []
+
+            name_group = p_cfg.get('name_group', 'name')
+            title_group = p_cfg.get('title_group', 'title')
+            email_group = p_cfg.get('email_group', 'email')
+
+            for m in regex.finditer(content):
+                gd = m.groupdict()
+                name = gd.get(name_group, '').strip()
+                title = gd.get(title_group, '').strip()
+                email = gd.get(email_group, '').strip()
+
+                if email and any(dom in email.lower() for dom in skip_domains):
+                    continue
+                if name and len(name.split()) >= 2 and any(c.isupper() for c in name) and len(name) <= 100:
+                    authors.append({"name": name, "title": title, "email": email})
+        else:
+            logging.error(f"Unsupported parse type: {parse_type}")
+            return []
+
+        return authors
     except Exception as e:
         logging.error(f"Error parsing model response: {e}")
         return []
-
 
 def load_processed_filenames(output_csv: str) -> Tuple[Set[str], int]:
     """
