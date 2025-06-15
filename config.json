@@ -16,7 +16,8 @@
     },
     "output": {
         "directory": "/N/project/fads_ng/analyst_reports_project/data/csv_reports/",
-        "csv_filename": "temp_author_report.csv"
+        "csv_filename": "temp_author_report.csv",
+        "csv_layout": "wide"
     },
     "execution": {
         "max_files": 100,

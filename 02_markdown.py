@@ -8,6 +8,14 @@ import queue
 import time
 import argparse
 from typing import List, Dict, Set, Tuple, Any, Optional
+
+# ---------------------------------------------------------------------------
+# Helper to read CSV layout (wide vs long) from configuration
+# ---------------------------------------------------------------------------
+
+def get_csv_layout() -> str:
+    """Return desired CSV layout style. Defaults to 'wide'."""
+    return get_config().get('output', {}).get('csv_layout', 'wide').lower()
 from ollama import Client
 import tiktoken
 import subprocess
@@ -241,6 +249,69 @@ def aggregate_author_results(chunk_results: List[List[Dict]]) -> List[Dict]:
     return list(authors_by_name.values())
 
 def append_results_to_csv(output_csv: str, new_results: List[Dict], max_authors: int) -> None:
+    """Append results to CSV, honouring configured layout."""
+    layout = get_csv_layout()
+    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+
+    # ------------------------------------------------------------------
+    # Long layout handling
+    # ------------------------------------------------------------------
+    if layout == 'long':
+        headers = ['filename', 'author_name', 'author_title', 'author_email']
+        file_exists = os.path.exists(output_csv)
+        try:
+            with open(output_csv, 'a', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=headers)
+                if not file_exists:
+                    writer.writeheader()
+                for entry in new_results:
+                    filename = entry.get('filename', '')
+                    authors = entry.get('authors', [])
+                    if not authors:
+                        writer.writerow({'filename': filename, 'author_name': '', 'author_title': '', 'author_email': ''})
+                    else:
+                        for author in authors:
+                            writer.writerow({
+                                'filename': filename,
+                                'author_name': author.get('name', ''),
+                                'author_title': author.get('title', ''),
+                                'author_email': author.get('email', '')
+                            })
+            logging.info(f"Appended {len(new_results)} records to {output_csv} (long layout).")
+        except Exception as e:
+            logging.error(f"Error appending to CSV file {output_csv}: {e}")
+            raise
+        return
+
+    # ------------------------------------------------------------------
+    # Wide layout handling
+    # ------------------------------------------------------------------
+    file_exists = os.path.exists(output_csv)
+    headers = ['filename']
+    for i in range(1, max_authors + 1):
+        headers.extend([f'author_{i}_name', f'author_{i}_title', f'author_{i}_email'])
+    try:
+        with open(output_csv, 'a', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=headers)
+            if not file_exists:
+                writer.writeheader()
+            for entry in new_results:
+                row = {'filename': entry.get('filename', '')}
+                for i in range(1, max_authors + 1):
+                    if i <= len(entry.get('authors', [])):
+                        author = entry['authors'][i-1]
+                        row[f'author_{i}_name'] = author.get('name', '')
+                        row[f'author_{i}_title'] = author.get('title', '')
+                        row[f'author_{i}_email'] = author.get('email', '')
+                    else:
+                        row[f'author_{i}_name'] = ''
+                        row[f'author_{i}_title'] = ''
+                        row[f'author_{i}_email'] = ''
+                writer.writerow(row)
+        logging.info(f"Appended {len(new_results)} new results to {output_csv} (wide layout).")
+    except Exception as e:
+        logging.error(f"Error appending to CSV file {output_csv}: {e}")
+        raise
     """
     Append new results to the CSV file instead of rewriting the entire file.
     """
@@ -712,6 +783,66 @@ def get_unprocessed_files(input_dir: str, processed_filenames: Set[str], max_fil
     return new_files
 
 def save_results(output_csv: str, data: List[Dict], max_authors: int) -> None:
+    """Save results to CSV respecting layout defined in config ('wide' or 'long')."""
+    layout = get_csv_layout()
+    # Ensure output directory exists
+    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+
+    # ------------------------------------------------------------------
+    # Long layout: one row per author
+    # ------------------------------------------------------------------
+    if layout == 'long':
+        headers = ['filename', 'author_name', 'author_title', 'author_email']
+        try:
+            with open(output_csv, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=headers)
+                writer.writeheader()
+                for entry in data:
+                    filename = entry.get('filename', '')
+                    authors = entry.get('authors', [])
+                    if not authors:
+                        writer.writerow({'filename': filename, 'author_name': '', 'author_title': '', 'author_email': ''})
+                    else:
+                        for author in authors:
+                            writer.writerow({
+                                'filename': filename,
+                                'author_name': author.get('name', ''),
+                                'author_title': author.get('title', ''),
+                                'author_email': author.get('email', '')
+                            })
+            logging.info(f"Results saved to {output_csv} (long layout).")
+        except Exception as e:
+            logging.error(f"Error saving CSV file {output_csv}: {e}")
+            raise
+        return  # Finished long layout path
+
+    # ------------------------------------------------------------------
+    # Wide layout (default): one row per file, dynamic author columns
+    # ------------------------------------------------------------------
+    headers = ['filename']
+    for i in range(max_authors):
+        headers.extend([f'author_{i+1}_name', f'author_{i+1}_title', f'author_{i+1}_email'])
+    try:
+        with open(output_csv, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=headers)
+            writer.writeheader()
+            for entry in data:
+                row = {'filename': entry.get('filename', '')}
+                for i in range(max_authors):
+                    if i < len(entry.get('authors', [])):
+                        author = entry['authors'][i]
+                        row[f'author_{i+1}_name'] = author.get('name', '')
+                        row[f'author_{i+1}_title'] = author.get('title', '')
+                        row[f'author_{i+1}_email'] = author.get('email', '')
+                    else:
+                        row[f'author_{i+1}_name'] = ''
+                        row[f'author_{i+1}_title'] = ''
+                        row[f'author_{i+1}_email'] = ''
+                writer.writerow(row)
+        logging.info(f"Results saved to {output_csv} (wide layout, max_authors={max_authors}).")
+    except Exception as e:
+        logging.error(f"Error saving CSV file {output_csv}: {e}")
+        raise
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_csv), exist_ok=True)
 
