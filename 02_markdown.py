@@ -253,8 +253,26 @@ def append_results_to_csv(output_csv: str, new_results: List[Dict], max_authors:
     layout = get_csv_layout()
     os.makedirs(os.path.dirname(output_csv), exist_ok=True)
 
+    # Determine if these results contain authors or generic columns
+    sample = new_results[0] if new_results else {}
+    if 'authors' not in sample:
+        # Generic (score) mode – just write simple columns
+        headers = ['filename'] + [k for k in sample.keys() if k != 'filename']
+        file_exists = os.path.exists(output_csv)
+        try:
+            with open(output_csv, 'a', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=headers)
+                if not file_exists:
+                    writer.writeheader()
+                for row in new_results:
+                    writer.writerow(row)
+            logging.info(f"Appended {len(new_results)} score rows to {output_csv}")
+        except Exception as e:
+            logging.error(f"Error writing to CSV file {output_csv}: {e}")
+        return
+
     # ------------------------------------------------------------------
-    # Long layout handling
+    # Author extraction mode (existing logic)
     # ------------------------------------------------------------------
     if layout == 'long':
         headers = ['filename', 'author_name', 'author_title', 'author_email']
@@ -581,10 +599,17 @@ def process_single_file(file_path: str, original_filename: str, server_url: str)
             chunk_result = extract_authors(chunk, server_url)
             chunk_authors.append(chunk_result)
         
-        # Aggregate authors from all chunks
-        authors = aggregate_author_results(chunk_authors)
-    
-    return {'filename': clean_name, 'authors': authors}
+        # Aggregate authors from all chunks (if authors were returned)
+        if chunk_authors and isinstance(chunk_authors[0], list):
+            authors = aggregate_author_results(chunk_authors)  # type: ignore
+            return {'filename': clean_name, 'authors': authors}
+        else:
+            # Score mode – each chunk should have returned a dict. We'll just use the
+            # first chunk's dictionary (they should be identical because the prompt
+            # asks for full-document analysis).
+            scores = chunk_authors[0] if chunk_authors else {}
+            scores = scores if isinstance(scores, dict) else {}
+            return {'filename': clean_name, **scores}
 
 def extract_authors(content: str, server_url: str) -> List[Dict]:
     """
@@ -620,7 +645,7 @@ def extract_authors(content: str, server_url: str) -> List[Dict]:
         logging.error(f"Ollama client error on {server_url}: {e}")
         raise
 
-def parse_model_response(response) -> List[Dict]:
+def parse_model_response(response):
     """Parse the LLM response according to the strategy defined in the config
     (section 'parsing'). Supports two strategies:
     - 'json': expects well-formed JSON;
@@ -634,6 +659,12 @@ def parse_model_response(response) -> List[Dict]:
         # Raw content string
         content = response.get('message', {}).get('content', '').strip()
 
+        # Shortcut: if the caller provided explicit field mapping, we'll treat the
+        # response as a per-document dictionary instead of an authors list.  This
+        # enables alternate configs (e.g. AI-washing) to coexist with the original
+        # author-extraction pipeline without code duplication.
+        field_mapping: Dict[str, str] = p_cfg.get('fields', {})
+
         # Strip markdown code fences like ```json ... ```
         if content.startswith('```'):
             content = re.sub(r'^```[a-zA-Z0-9]*\n', '', content)
@@ -645,9 +676,25 @@ def parse_model_response(response) -> List[Dict]:
         if parse_type == 'json':
             try:
                 data = json.loads(content)
-            except json.JSONDecodeError as ex:
-                logging.error(f"JSON decode error: {ex}")
-                return []
+            except json.JSONDecodeError:
+                logging.error("JSON parse error in model response – returning empty list/dict")
+                return {} if field_mapping else []
+
+            # If a field_mapping is supplied, extract the specified keys and return
+            # a dictionary (score mode). Each mapping value can be a dotted path.
+            if field_mapping:
+                extracted: Dict[str, Any] = {}
+                for csv_key, path in field_mapping.items():
+                    parts = path.split('.')
+                    node = data
+                    for part in parts:
+                        if isinstance(node, dict) and part in node:
+                            node = node[part]
+                        else:
+                            node = ''
+                            break
+                    extracted[csv_key] = node
+                return extracted
 
             authors_key = p_cfg.get('authors_key', 'authors')
             raw_authors = data.get(authors_key, [])
@@ -785,11 +832,25 @@ def get_unprocessed_files(input_dir: str, processed_filenames: Set[str], max_fil
 def save_results(output_csv: str, data: List[Dict], max_authors: int) -> None:
     """Save results to CSV respecting layout defined in config ('wide' or 'long')."""
     layout = get_csv_layout()
-    # Ensure output directory exists
     os.makedirs(os.path.dirname(output_csv), exist_ok=True)
 
+    # If data does not contain 'authors', treat as generic score rows
+    if data and 'authors' not in data[0]:
+        headers = ['filename'] + [k for k in data[0].keys() if k != 'filename']
+        try:
+            with open(output_csv, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=headers)
+                writer.writeheader()
+                for row in data:
+                    writer.writerow(row)
+            logging.info(f"Results saved to {output_csv}.")
+        except Exception as e:
+            logging.error(f"Error saving CSV file {output_csv}: {e}")
+            raise
+        return
+
     # ------------------------------------------------------------------
-    # Long layout: one row per author
+    # Existing author-extraction logic
     # ------------------------------------------------------------------
     if layout == 'long':
         headers = ['filename', 'author_name', 'author_title', 'author_email']

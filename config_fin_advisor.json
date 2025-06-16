@@ -1,0 +1,48 @@
+{
+    "ollama": {
+        "model": "qwen:7b",
+        "timeout": 180,
+        "auto_detect": true,
+        "port_range": [11434, 11465]
+    },
+    "processing": {
+        "chunk_size": 6000,
+        "chunk_overlap": 1000,
+        "max_tokens": 8000
+    },
+    "input": {
+        "directory": "/N/project/fads_ng/financial_advisors_project/data/brochures_in_text_for_test/"
+    },
+    "output": {
+        "directory": "/N/project/fads_ng/financial_advisors_project/data/qwq_output/",
+        "csv_filename": "ai_washing_report_from_config.csv",
+        "csv_layout": "wide"
+    },
+    "execution": {
+        "max_files": 1000,
+        "timeout_seconds": 120,
+        "max_retries": 3
+    },
+    "prompt": {
+        "template": "You are an expert financial advisor specializing in technology investments. Your task is to analyze the following text from a company's financial advisor brochure for \"AI washing\" — the practice of making exaggerated or misleading claims about AI capabilities.\n\nAnalyze the text for the following categories:\n1.  **Vague Terminology**: Use of buzzwords like \"AI-powered,\" \"machine learning,\" \"intelligent,\" \"smart,\" or \"automated\" without specific details on how the technology works or what it does.\n2.  **Lack of Specifics**: Claims about improving outcomes, efficiency, or performance without providing concrete data, metrics, or case studies to back them up.\n3.  **Overpromising Benefits**: Suggestions that AI can solve complex problems with little effort, guarantee returns, or eliminate risks, which is often unrealistic.\n\nFor each category, provide a score from 0 to 10, where 0 means no evidence of AI washing and 10 means severe AI washing. Also, provide a brief justification for each score and include up to two direct quotes from the text as evidence.\n\nRespond ONLY in valid JSON format with the following structure:\n{\n  \"vague_terminology\": {\n    \"score\": <score>,\n    \"justification\": \"<justification>\",\n    \"examples\": [\"<quote1>\", \"<quote2>\"]\n  },\n  \"lack_of_specifics\": {\n    \"score\": <score>,\n    \"justification\": \"<justification>\",\n    \"examples\": [\"<quote1>\", \"<quote2>\"]\n  },\n  \"overpromising_benefits\": {\n    \"score\": <score>,\n    \"justification\": \"<justification>\",\n    \"examples\": [\"<quote1>\", \"<quote2>\"]\n  }\n}\n\nTEXT CONTENT:\n{{TEXT_CONTENT}}"
+    },
+    "parsing": {
+        "type": "json",
+        "note": "THIS SECTION REQUIRES MODIFYING 02_markdown.py TO WORK. The script expects a list of items (like authors), not a single complex object.",
+        "fields": {
+            "vague_score": "vague_terminology.score",
+            "vague_justification": "vague_terminology.justification",
+            "vague_examples": "vague_terminology.examples",
+            "specifics_score": "lack_of_specifics.score",
+            "specifics_justification": "lack_of_specifics.justification",
+            "specifics_examples": "lack_of_specifics.examples",
+            "benefits_score": "overpromising_benefits.score",
+            "benefits_justification": "overpromising_benefits.justification",
+            "benefits_examples": "overpromising_benefits.examples"
+        }
+    },
+    "debug": {
+        "enabled": false,
+        "log_level": "INFO"
+    }
+}
